@@ -109,6 +109,14 @@ describe("text renderers", () => {
     expect(reasoningPropsEqual(props(thought), props({ ...thought, phase: "complete" }))).toBe(false);
   });
 
+  it("assistant refreshes host actions when pending state changes without new text", () => {
+    const reply = { text: "Hello", phase: "complete" };
+    const ready = props(reply, 1000, { turnActions: "ready" });
+    expect(assistantPropsEqual(ready, props(reply, 1000, { turnActions: "ready" }))).toBe(true);
+    expect(assistantPropsEqual(ready, props(reply, 1000, { turnActions: "pending" }))).toBe(false);
+    expect(assistantPropsEqual(ready, props(reply, 1000, { turnActions: null }))).toBe(false);
+  });
+
   it("assistant compares text, phase and timestamp", () => {
     const reply = { text: "Hello" };
     expect(assistantPropsEqual(props(reply), props(reply))).toBe(true);

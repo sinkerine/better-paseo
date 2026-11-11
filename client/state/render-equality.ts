@@ -90,6 +90,7 @@ export function reasoningPropsEqual<T extends TextData>(prev: Props<T>, next: Pr
 }
 
 export function assistantPropsEqual<T extends TextData>(prev: Props<T>, next: Props<T>): boolean {
+  if (prev.turnActions !== next.turnActions) return false;
   const a = prev.item.data;
   const b = next.item.data;
   return (

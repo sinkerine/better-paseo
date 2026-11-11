@@ -545,6 +545,7 @@ const assistantBlockStyles = StyleSheet.create({
 });
 
 function LiveAssistantMessageRenderer({
+  turnActions,
   agentId,
   item,
   theme,
@@ -635,6 +636,7 @@ function LiveAssistantMessageRenderer({
           tokens={tokens}
           compact={layout.compact}
           streaming={streaming}
+          turnActions={turnActions}
         />
       ) : null}
       <DetailsHostSlot agentId={agentId} itemKey={hostSlotKey} tokens={tokens} compact={layout.compact} />
@@ -661,7 +663,9 @@ const TurnFooter = memo(function TurnFooter({
   tokens,
   compact,
   streaming,
+  turnActions,
 }: {
+  turnActions?: React.ReactNode;
   agentId: string;
   text: string;
   at: Date;
@@ -674,10 +678,11 @@ const TurnFooter = memo(function TurnFooter({
   const timing = useTurnFooter(paseo, agentId, at.getTime(), text, running, streaming);
   if (!timing) return null;
   return <CompletedReplyFooter agentId={agentId} text={text} at={new Date(timing.completedAt)} tokens={tokens}
-    compact={compact} durationMs={timing.durationMs} startedAt={timing.startedAt} usage={timing.usage} />;
+    compact={compact} durationMs={timing.durationMs} startedAt={timing.startedAt} usage={timing.usage} turnActions={turnActions} />;
 });
 
-function CompletedReplyFooter({ agentId, text, at, tokens, compact, durationMs, startedAt, usage }: {
+function CompletedReplyFooter({ agentId, text, at, tokens, compact, durationMs, startedAt, usage, turnActions }: {
+  turnActions?: React.ReactNode;
   agentId: string;
   text: string;
   at: Date;
@@ -695,7 +700,7 @@ function CompletedReplyFooter({ agentId, text, at, tokens, compact, durationMs, 
   const model = useFooterModel(paseo, agentName, modelId, thinkingOptionId, cwd);
   return <AssistantFooter text={text} at={at} agentName={agentName} modelId={modelId} modelName={model.modelName}
     thinkingLabel={model.thinkingLabel}
-    durationMs={durationMs} startedAt={startedAt} usage={usage} tokens={tokens} compact={compact} />;
+    durationMs={durationMs} startedAt={startedAt} usage={usage} tokens={tokens} compact={compact} turnActions={turnActions} />;
 }
 
 /**

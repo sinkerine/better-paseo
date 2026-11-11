@@ -235,6 +235,7 @@ export default function contribute(client: PluginClientContext) {
 
   const removeAssistantRenderer = client.addTimelineRenderer({
     kind: "omp-assistant",
+    turnActions: "inline",
     version: 1,
     schema: z.object({ text: z.string(), phase: z.string().optional(),
       blockIndex: z.number().int().nonnegative().optional(), messageText: z.string().optional(),

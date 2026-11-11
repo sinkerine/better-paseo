@@ -18,22 +18,11 @@ import { useEnhancerPreferences } from "../preferences";
 import { resolveLanguage } from "../i18n/settings-strings";
 import { toolbarLabel } from "../i18n/toolbar-strings";
 
-/**
- * The host's own reply footer — copy, fork and the turn's time — is drawn by
- * the stream layout, not by the message renderer: it walks up from the newest
- * item looking for a `assistant_message` stream item
- * (`agent-stream/layout.ts:102`). A transformed item is projected as
- * `kind: "plugin"` (`plugins/timeline/projection.ts:96`), so once this plugin
- * renders the reply the host finds no assistant and draws no footer.
- *
- * This is the part a plugin can rebuild. Fork is not: it needs the daemon
- * client and a timeline cursor (`hooks/use-fork-agent.ts`), and the plugin SDK
- * exposes neither. Turning "Assistant markdown" off in settings hands the reply
- * back to the host, which brings the full footer with it.
- */
+/** Paseo owns the fork menu; this footer supplies its surrounding layout. */
 interface AssistantFooterProps {
   /** The reply, copied verbatim — the same text the host would copy. */
   text: string;
+  turnActions?: React.ReactNode;
   /** The completed turn's end time; source reply identity is resolved before rendering. */
   at: Date;
   agentName?: string | null;
@@ -49,7 +38,7 @@ interface AssistantFooterProps {
   compact?: boolean;
 }
 
-export function AssistantFooter({ text, at, agentName, modelId, modelName, thinkingLabel, durationMs, startedAt, usage, tokens, compact = false }: AssistantFooterProps) {
+export function AssistantFooter({ turnActions, text, at, agentName, modelId, modelName, thinkingLabel, durationMs, startedAt, usage, tokens, compact = false }: AssistantFooterProps) {
   // The shared copy path (plan §3.8): a check for 1.2 s on success, a toast
   // on failure, and no timer left running after unmount.
   const { copied, copy } = useCopy();
@@ -159,6 +148,7 @@ export function AssistantFooter({ text, at, agentName, modelId, modelName, think
           />
           <Text style={styles.copyLabel}>{toolbarLabel("Copy", language)}</Text>
         </ToolbarItem>
+        {turnActions ? <View onLayout={compact ? measure.actions : undefined}>{turnActions}</View> : null}
         {modelName && fit.model ? (
           <ToolbarItem
             onLayout={compact ? measure.model : undefined}
@@ -215,7 +205,7 @@ const FOOTER_HEIGHT = 24;
 /** A replayed Grok or Cursor turn spans under this; a live model turn never does. */
 const REPLAY_COLLAPSE_MS = 1_000;
 
-type FooterSlot = "copy" | "model" | "clock" | "duration";
+type FooterSlot = "copy" | "actions" | "model" | "clock" | "duration";
 export interface FooterFit { model: boolean; clock: boolean }
 
 /**
@@ -230,8 +220,8 @@ export function fitOneLine(widths: Partial<Record<FooterSlot, number>>, row: num
   };
   // Half a point of rounding must not drop an item that fits.
   const fits = (slots: readonly FooterSlot[]) => span(slots) <= row + 0.5;
-  if (fits(["copy", "model", "clock", "duration"])) return { model: true, clock: true };
-  if (fits(["copy", "model", "duration"])) return { model: true, clock: false };
+  if (fits(["copy", "actions", "model", "clock", "duration"])) return { model: true, clock: true };
+  if (fits(["copy", "actions", "model", "duration"])) return { model: true, clock: false };
   return { model: false, clock: false };
 }
 
@@ -248,7 +238,7 @@ function useOneLineFit(compact: boolean, hasModel: boolean, hasDuration: boolean
       const width = event.nativeEvent.layout.width;
       setWidths((previous) => previous[name] === width ? previous : { ...previous, [name]: width });
     };
-    return { row: slot("row"), copy: slot("copy"), model: slot("model"), clock: slot("clock"), duration: slot("duration") };
+    return { row: slot("row"), copy: slot("copy"), actions: slot("actions"), model: slot("model"), clock: slot("clock"), duration: slot("duration") };
   }, []);
   const { row, model, duration, ...rest } = widths;
   const fit = compact && row ? fitOneLine({ ...rest, ...(hasModel ? { model } : {}), ...(hasDuration ? { duration } : {}) },
