@@ -2604,7 +2604,7 @@ describe("Tasks data store", () => {
       }
     });
 
-    it("counts a running subagent's card in the sidebar's running count, as the board's lane does", async () => {
+    it("counts only the parent while its provider subagent runs", async () => {
       setSubagentLoader(async () => ({ version: "1", subagents: [subagent("a", { status: "running" })] }));
       const fake = createFakePaseo({ agents: [activeAgent("parent", { status: "running" })] });
       let current!: ReturnType<typeof useTaskCounts>;
@@ -2620,9 +2620,9 @@ describe("Tasks data store", () => {
       });
       try {
         await act(async () => {
-          await vi.waitFor(() => expect(current.running).toBe(2));
+          await vi.waitFor(() => expect(current.running).toBe(1));
         });
-        expect(current).toEqual({ needsInput: 0, running: 2, review: 0, ready: true });
+        expect(current).toEqual({ needsInput: 0, running: 1, review: 0, ready: true });
       } finally {
         act(() => renderer.unmount());
         setSubagentLoader(null);
@@ -2650,10 +2650,10 @@ describe("Tasks data store", () => {
       });
       try {
         await act(async () => {
-          await vi.waitFor(() => expect(current.review).toBe(2));
+          await vi.waitFor(() => expect(current.review).toBe(1));
         });
-        // The parent and its failed subagent's card, as the board's review lane shows them.
-        expect(current).toEqual({ needsInput: 0, running: 1, review: 2, ready: true });
+        // A subagent failure brings its parent into review without adding a separate card.
+        expect(current).toEqual({ needsInput: 0, running: 1, review: 1, ready: true });
         expect(fake.calls.filter((call) => call.method === "agents.ref.refresh").map((call) => call.input)).toEqual([{ agentId: "parent" }]);
       } finally {
         act(() => renderer.unmount());

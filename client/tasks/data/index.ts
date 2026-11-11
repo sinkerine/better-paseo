@@ -2731,10 +2731,6 @@ function createStore(api: PaseoApi): TaskStore {
       for (const card of cards.values()) {
         if (inBackgroundWorkspace(card) || entries.get(card.id)?.agent.labels?.[TITLE_HELPER_LABEL] === TITLE_HELPER_PURPOSE) continue;
         add(card);
-        // A provider subagent's card counts in its lane, as the board draws it (`withSubagentCards`).
-        if (card.lane !== "archived" && card.children.some((child) => child.kind === "provider")) {
-          for (const sub of subagentCardsOf(card)) add(sub);
-        }
       }
       const shown = scope ? filterLanes(lanes, scope.filters, scope.firstMessage && scope.filters.query.trim() ? firstMessagesOf(lanes, scope.firstMessage) : undefined) : lanes;
       const needsInput = shown.needs_input.cards.length;
@@ -3198,7 +3194,7 @@ export function releaseTasksHolds(): void {
  * The sidebar's counts. Alone it opens the agents in flight (running,
  * initializing, error), their workspace visibility, and with `review` the
  * unread and failed ones too; no projects, labels or model names. It counts
- * the cards an unfiltered board draws, a provider subagent's included.
+ * the agent cards an unfiltered board draws; provider subagents stay within their parents.
  * Re-renders only when a number changes.
  */
 export function useTaskCounts(paseo: PaseoApi, review: boolean, scope?: CountScope): SidebarCounts {

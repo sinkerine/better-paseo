@@ -347,7 +347,7 @@ function handle(): TasksHandle {
 }
 
 describe("filter options", () => {
-  it("counts visible subtasks across groups when their display is toggled", () => {
+  it("counts visible agent subtasks across groups and excludes provider subagents", () => {
     const tasks = handle();
     const base = tasks.lanes.running.cards[0]!;
     tasks.labels = base.labels;
@@ -359,14 +359,14 @@ describe("filter options", () => {
     for (const lane of LANE_ORDER) tasks.lanes[lane] = { ...tasks.lanes[lane], cards: lane === "running" ? [parent, child] : [] };
     const shown = buildFilterOptions(tasks, { ...EMPTY_PARAMS, hideSubtasks: false });
     const hidden = buildFilterOptions(tasks, { ...EMPTY_PARAMS, hideSubtasks: true });
-    expect(shown.agents.find((option) => option.id === base.provider)?.count).toBe(3);
+    expect(shown.agents.find((option) => option.id === base.provider)?.count).toBe(2);
     expect(hidden.agents.find((option) => option.id === base.provider)?.count).toBe(1);
-    expect(shown.workspaceGroups[0]!.items[0]!.count).toBe(3);
+    expect(shown.workspaceGroups[0]!.items[0]!.count).toBe(2);
     expect(hidden.workspaceGroups[0]!.items[0]!.count).toBe(1);
-    expect(projectOptions(shown)[0]!.count).toBe(3);
+    expect(projectOptions(shown)[0]!.count).toBe(2);
     expect(projectOptions(hidden)[0]!.count).toBe(1);
     for (const label of base.labels) {
-      expect(shown.labels.find((option) => option.id === label.name)?.count).toBe(3);
+      expect(shown.labels.find((option) => option.id === label.name)?.count).toBe(2);
       expect(hidden.labels.find((option) => option.id === label.name)?.count).toBe(1);
     }
   });

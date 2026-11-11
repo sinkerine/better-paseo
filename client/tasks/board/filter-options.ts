@@ -1,4 +1,4 @@
-import { filterLanes, withSubagentCards, type TasksHandle, type WorkspaceOption } from "../data";
+import { filterLanes, type TasksHandle, type WorkspaceOption } from "../data";
 import { fallbackLabelColor } from "../label-colors";
 import { EMPTY_FILTERS, LANE_ORDER, type TaskCard } from "../model";
 import { toggleItem, type BoardDefaults, type BoardParams } from "./params";
@@ -45,7 +45,7 @@ export function buildFilterOptions(tasks: TasksHandle, params: BoardParams): Fil
   const byWorkspace = new Map<string, number>();
   const byProvider = new Map<string, number>();
   const byLabel = new Map<string, number>();
-  const lanes = filterLanes(withSubagentCards(tasks.lanes), { ...EMPTY_FILTERS, hideSubtasks: params.hideSubtasks ?? false });
+  const lanes = filterLanes(tasks.lanes, { ...EMPTY_FILTERS, hideSubtasks: params.hideSubtasks ?? false });
   for (const lane of LANE_ORDER) {
     for (const card of lanes[lane].cards) {
       const workspaceId = card.location.workspaceId;

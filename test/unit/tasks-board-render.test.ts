@@ -2029,21 +2029,15 @@ describe("Tasks board, desktop", () => {
     }
   });
 
-  it.each(["child", "provider"] as const)("keeps a selected %s subtask current across lane moves, floating close and deletion", async (kind) => {
+  it("keeps a selected child subtask current across lane moves, floating close and deletion", async () => {
     const handle = (data as unknown as { __handle: { lanes: Record<string, { cards: TaskCard[] }>; byId: Map<string, TaskCard> } }).__handle;
     const saved = { lanes: handle.lanes, byId: handle.byId };
-    const parent = saved.byId.get("sample-running")!;
     const child = saved.byId.get("sample-child-1")!;
     try {
-      if (kind === "provider") {
-        const next: TaskCard = { ...parent, children: [{ id: "provider-selection", title: "Provider child", kind: "provider" as const, lane: "running" as const, status: "running", timing: child.timing }] };
-        handle.lanes = { ...saved.lanes, running: { ...saved.lanes.running!, cards: [next] } };
-        handle.byId = new Map(saved.byId).set(parent.id, next);
-      }
       finishSidebarCloseImmediately();
       await act(async () => { renderer = TestRenderer.create(screen(false)); });
       layOut(900);
-      const id = kind === "provider" ? "provider-selection" : child.id;
+      const id = child.id;
       const selected = () => cards().find((node) => node.props.card.id === id)!;
       await act(async () => selected().props.onSelect(selected().props.card));
       expect(cards().filter((node) => node.props.current).map((node) => node.props.card.id)).toEqual([id]);
@@ -2053,25 +2047,22 @@ describe("Tasks board, desktop", () => {
       await act(async () => toggleSidebarControl());
       expect(selected().props.current).toBe(true);
       const moved: TaskCard = { ...selected().props.card, lane: "review" };
-      const movedParent: TaskCard = { ...parent, children: [{ id, title: moved.title, kind: "provider" as const, lane: "review" as const, status: "running", timing: moved.timing }] };
       handle.lanes = {
         ...handle.lanes,
-        running: { ...handle.lanes.running!, cards: kind === "provider" ? [movedParent] : handle.lanes.running!.cards.filter((card) => card.id !== id) },
-        review: { ...handle.lanes.review!, cards: kind === "provider" ? handle.lanes.review!.cards : [...handle.lanes.review!.cards, moved] },
+        running: { ...handle.lanes.running!, cards: handle.lanes.running!.cards.filter((card) => card.id !== id) },
+        review: { ...handle.lanes.review!, cards: [...handle.lanes.review!.cards, moved] },
       };
-      handle.byId = new Map(handle.byId).set(kind === "provider" ? parent.id : id, kind === "provider" ? movedParent : moved);
+      handle.byId = new Map(handle.byId).set(id, moved);
       await act(async () => renderer!.update(screen(false)));
       expect(selected().props.card.lane).toBe("review");
       expect(selected().props.current).toBe(true);
       handle.lanes = {
         ...handle.lanes,
-        running: { ...handle.lanes.running!, cards: kind === "provider" ? [{ ...parent, children: [] }] : handle.lanes.running!.cards },
         review: { ...handle.lanes.review!, cards: handle.lanes.review!.cards.filter((card) => card.id !== id) },
       };
 
       handle.byId = new Map(handle.byId);
-      if (kind === "provider") handle.byId.set(parent.id, { ...parent, children: [] });
-      else handle.byId.delete(id);
+      handle.byId.delete(id);
       await act(async () => renderer!.update(screen(false)));
       expect(cards().some((node) => node.props.card.id === id)).toBe(false);
       expect(cards().some((node) => node.props.current)).toBe(false);
@@ -7466,6 +7457,27 @@ describe("Tasks board, phone", () => {
       const detail = renderer!.root.findByType(TaskDetailCards);
       expect(!!detail.props.stop).toBe(canStop && !provider);
       if (compact) expect(!!renderer!.root.findByType(DetailActionBar).props.stop).toBe(canStop && !provider);
+    } finally {
+      handle.lanes = saved.lanes;
+      handle.byId = saved.byId;
+    }
+  });
+
+  it.each([false, true])("keeps provider subagents inside the parent card (compact: %s)", async (compact) => {
+    const handle = (data as unknown as { __handle: { lanes: Record<string, { cards: TaskCard[] }>; byId: Map<string, TaskCard> } }).__handle;
+    const saved = { lanes: handle.lanes, byId: handle.byId };
+    const base = saved.byId.get("sample-running")!;
+    const parent: TaskCard = { ...base, children: ["running", "failed", "done"].map((status) => ({
+      id: `provider-${status}`, title: `Provider ${status}`, status: status as "running" | "failed" | "done",
+      kind: "provider" as const, lane: status === "failed" ? "review" : status as "running" | "done", timing: base.timing,
+    })) };
+    try {
+      handle.lanes = { ...saved.lanes, running: { ...saved.lanes.running!, cards: [parent] } };
+      handle.byId = new Map(saved.byId).set(parent.id, parent);
+      await act(async () => { renderer = TestRenderer.create(screen(compact, { sub: "0" })); });
+      if (!compact) layOut(1400);
+      expect(cards().some((node) => node.props.card.subagent)).toBe(false);
+      expect(cards().find((node) => node.props.card.id === parent.id)!.props.card.children).toEqual(parent.children);
     } finally {
       handle.lanes = saved.lanes;
       handle.byId = saved.byId;
