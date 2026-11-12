@@ -12,6 +12,10 @@ import { describe, expect, it, vi } from "vitest";
 import React from "react";
 
 vi.mock("react-native", () => import("./helpers/rn-mock"));
+vi.mock("@getpaseo/plugin/client/ui", () => ({
+  Markdown: ({ children }: { children: string }) =>
+    React.createElement("HostMarkdown", { source: children }),
+}));
 vi.mock("@getpaseo/plugin/client/react-native", async () => {
   const rn = await import("./helpers/rn-mock");
   return {
@@ -37,7 +41,9 @@ const TestRenderer = (await import("react-test-renderer")).default;
 const { act } = await import("react-test-renderer");
 const { buildThemeTokens } = await import("../../client/components/theme-tokens");
 const { MarkdownView } = await import("../../client/components/markdown/markdown-view");
-const { enablePerf, perfSnapshot, resetPerf, disablePerf } = await import("../../client/debug/perf");
+const { Markdown } = await import("@getpaseo/plugin/client/ui");
+const { enablePerf, perfSnapshot, resetPerf, disablePerf } =
+  await import("../../client/debug/perf");
 const { fixtureNames, streamTexts } = await import("./helpers/stream-texts");
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -56,6 +62,30 @@ const tokens = buildThemeTokens({
   statusDanger: "#d23c3c",
 });
 
+describe("MarkdownView math", () => {
+  it("passes the complete attention paragraph to the host math renderer on web", () => {
+    const runtime = globalThis as { __rnMockOS?: string };
+    const previousOS = runtime.__rnMockOS;
+    runtime.__rnMockOS = "web";
+    const source =
+      "`enable_gqa=True` tells PyTorch that multiple query heads share each key/value head—the grouping described by your `n_repeats`. " +
+      String.raw`The function also applies the usual \(1/\sqrt{\text{head_dim}}\) scale automatically.`;
+    let renderer: ReturnType<typeof TestRenderer.create> | undefined;
+    try {
+      act(() => {
+        renderer = TestRenderer.create(
+          React.createElement(MarkdownView, { text: source, tokens, variant: "document" }),
+        );
+      });
+      const math = renderer!.root.findAllByType(Markdown);
+      expect(math.map((node) => node.props.children)).toEqual([source]);
+    } finally {
+      act(() => renderer?.unmount());
+      runtime.__rnMockOS = previousOS;
+    }
+  });
+});
+
 describe("MarkdownView while a reply streams", () => {
   for (const variant of ["document", "compact"] as const) {
     it(`${variant}: finished blocks never re-render and no block flips`, () => {
@@ -70,7 +100,14 @@ describe("MarkdownView while a reply streams", () => {
           replies += 1;
           const probeId = `${fixture}:${item.index}`;
           const view = (text: string, streaming: boolean) =>
-            React.createElement(MarkdownView, { text, tokens, variant, streaming, probeId, compact: true });
+            React.createElement(MarkdownView, {
+              text,
+              tokens,
+              variant,
+              streaming,
+              probeId,
+              compact: true,
+            });
           let renderer: ReturnType<typeof TestRenderer.create> | undefined;
           let text = "";
           const before = rerenders();

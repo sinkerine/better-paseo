@@ -1,8 +1,9 @@
 import React, { memo, useEffect, useRef } from "react";
 import { Platform } from "react-native";
+import { Markdown } from "@getpaseo/plugin/client/ui";
 import { perfCount, perfOn } from "../../../debug/perf";
 import type { Token } from "../../../vendor/marked";
-import { lexBlock } from "../lex";
+import { hasMath, lexBlock } from "../lex";
 import { renderBlocks } from "./blocks";
 import { nextReuse, type NodeReuse } from "./reuse";
 import type { RenderContext } from "./context";
@@ -42,10 +43,20 @@ function MdBlockBody({ raw, open, first, context, id }: MdBlockProps) {
   // before it reads, so a block holding one is drawn whole every time.
   const drawn = useRef<{ context: RenderContext; nodes: NodeReuse["next"] } | null>(null);
   const reuse = nextReuse(drawn, context, open && !hasReferences(tokens, raw));
-  const nodes = renderBlocks(tokens, context, id, { first, open, reuse });
-  return Platform.OS === "ios" && selectableBlock(tokens)
-    ? <BlockSelection source={raw} blocks={tokens} tokens={context.tokens}>{nodes}</BlockSelection>
-    : <>{nodes}</>;
+  // The host owns KaTeX, math fonts and TeX selection-copy on web.
+  const nodes =
+    Platform.OS === "web" && hasMath(tokens) ? (
+      <Markdown>{raw}</Markdown>
+    ) : (
+      renderBlocks(tokens, context, id, { first, open, reuse })
+    );
+  return Platform.OS === "ios" && selectableBlock(tokens) ? (
+    <BlockSelection source={raw} blocks={tokens} tokens={context.tokens}>
+      {nodes}
+    </BlockSelection>
+  ) : (
+    nodes
+  );
 }
 
 /** marked keeps the block's link definitions beside its tokens, wherever they sit. */

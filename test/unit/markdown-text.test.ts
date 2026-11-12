@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { blockKind, lexBlock, lexCacheSize } from "../../client/components/markdown/lex";
+import { blockKind, hasMath, lexBlock, lexCacheSize } from "../../client/components/markdown/lex";
 import {
   codeLanguage,
   decodeEntities,
@@ -72,6 +72,38 @@ describe("lexBlock", () => {
     expect(blockKind(lexBlock("$$\nE = mc^2\n$$\n"))).toBe("math");
     expect(blockKind(lexBlock("$$\nE = mc^"))).toBe("math");
     expect(lexBlock("$$\na\n$$")[0]).toMatchObject({ type: "math", text: "a", closed: true });
+  });
+
+  it("keeps inline math intact before Markdown can consume its escapes", () => {
+    const source = String.raw`The usual \(1/\sqrt{\text{head_dim}}\) scale.`;
+    expect(lexBlock(source)[0]).toMatchObject({
+      type: "paragraph",
+      tokens: [
+        { type: "text", text: "The usual " },
+        { type: "inlineMath", raw: String.raw`\(1/\sqrt{\text{head_dim}}\)` },
+        { type: "text", text: " scale." },
+      ],
+    });
+  });
+
+  it.each([
+    [String.raw`Before \(x^2\) after.`, true],
+    ["Before $x^2$ after.", true],
+    [String.raw`**Bold \(x\)**`, true],
+    [String.raw`- Item \(x\)`, true],
+    [String.raw`> Quote \(x\)`, true],
+    ["| Formula |\n| --- |\n| $x$ |", true],
+    ["$$\nx^2\n$$", true],
+    ["\\[\nx^2\n\\]", true],
+    ["$$\nx^2", false],
+    [String.raw`Unclosed \(x`, false],
+    ["It costs $5 and $10.", false],
+    [String.raw`Escaped \\(x\\)`, false],
+    [String.raw`Code ` + "`\\(x\\) $y$`", false],
+    ["```tex\n\\(x\\) $y$\n```", false],
+    ["Plain **prose**", false],
+  ])("detects renderable math without consuming code or currency: %s", (source, expected) => {
+    expect(hasMath(lexBlock(source))).toBe(expected);
   });
 
   it("returns the cached tree for the same source and stays bounded", () => {
