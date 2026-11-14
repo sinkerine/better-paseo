@@ -7,6 +7,53 @@ import "./helpers/quiet-renderer";
 vi.mock("react-native", () => import("./helpers/rn-mock"));
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
+it("keeps a newer running update when an older confirmation read finishes", async () => {
+  const old = makeAgent({ id: "task", status: "idle", updatedAt: at(10) });
+  const fake = createFakePaseo({ agents: [old] });
+  const refAgent = fake.paseo.agents.ref.bind(fake.paseo.agents);
+  let release!: () => void;
+  let readStarted!: () => void;
+  const gate = new Promise<void>((resolve) => { release = resolve; });
+  const started = new Promise<void>((resolve) => { readStarted = resolve; });
+  vi.spyOn(fake.paseo.agents, "ref").mockImplementation((agent) => {
+    const ref = refAgent(agent);
+    return {
+      ...ref,
+      async refresh() {
+        const snapshot = await ref.refresh();
+        readStarted();
+        await gate;
+        return snapshot;
+      },
+    };
+  });
+  let tasks!: TasksHandle;
+  function Probe() {
+    tasks = useTasks(fake.paseo, { doneWindow: "all", includeDone: true });
+    return null;
+  }
+  let renderer!: ReturnType<typeof TestRenderer.create>;
+  await act(async () => { renderer = TestRenderer.create(React.createElement(Probe)); });
+  try {
+    await act(async () => {
+      fake.pushAgentSnapshot({ ...old, updatedAt: at(9) });
+      await started;
+    });
+    await act(async () => {
+      fake.upsertAgent({ ...old, status: "running", updatedAt: at(11), activeTurn: { turnId: "next", startedAt: at(11) } });
+    });
+    expect(tasks.counts.running).toBe(1);
+    await act(async () => { release(); });
+    expect(tasks.byId.get("task")).toMatchObject({ lane: "running", status: "running" });
+    expect(tasks.counts.running).toBe(1);
+    expect(tasks.lanes.done.cards.map((card) => card.id)).not.toContain("task");
+  } finally {
+    release();
+    act(() => renderer.unmount());
+    vi.restoreAllMocks();
+  }
+});
+
 const cases = [
   { name: "initializing with an active turn", from: "idle", change: { status: "initializing", activeTurn: { turnId: "next", startedAt: at(11) } }, lane: "running", status: "running" },
   { name: "history initialization", from: "idle", change: { status: "initializing", activeTurn: null }, lane: "done", status: "done" },

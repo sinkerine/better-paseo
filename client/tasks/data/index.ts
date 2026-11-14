@@ -1537,9 +1537,12 @@ function createStore(api: PaseoApi): TaskStore {
     if (confirmChecks.has(id)) return;
     confirmChecks.add(id);
     const run = generation;
+    const previous = entries.get(id);
     void api.agents.ref(id).refresh().then((result) => {
       if (run !== generation) return;
       confirmChecks.delete(id);
+      // A confirmation cannot override an update received while its read was in flight.
+      if (entries.get(id) !== previous) return;
       if (!result || (isArchived(result.agent) && !keepsArchived(result.agent))) return;
       const agent = result.agent;
       batchUpdates(() => {
