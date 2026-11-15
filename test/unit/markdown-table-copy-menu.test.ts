@@ -42,6 +42,7 @@ vi.mock("../../client/ui/element-image", () => ({ canCopyImage: () => true, copy
 await import("./helpers/quiet-renderer");
 const { default: TestRenderer, act } = await import("react-test-renderer");
 const { buildThemeTokens } = await import("../../client/components/theme-tokens");
+const { TableCopyMenu } = await import("../../client/components/markdown/render/table-copy-menu");
 const { MarkdownView } = await import("../../client/components/markdown/markdown-view");
 const { ChatComposerContext } = await import("../../client/ui/chat-composer");
 const { getEnhancerPreferences, updateEnhancerPreferences } = await import("../../client/preferences");
@@ -93,7 +94,7 @@ interface DomNodeMock extends EventTargetMock {
 function domNode(style: unknown, testID?: string): DomNodeMock {
   const doc = { ...target(), defaultView: target() };
   const node: DomNodeMock = { mock: style, testID, ...target(), ownerDocument: doc, style: { setProperty: vi.fn() },
-    contains: (other) => other === node };
+    contains: (other) => other === node, closest: () => btwAvailable ? node : null, dispatchEvent: btwDispatch } as DomNodeMock;
   nodes.push(node);
   return node;
 }
@@ -112,6 +113,9 @@ function target(): EventTargetMock {
   };
 }
 let nodes: DomNodeMock[] = [];
+let btwAvailable = false;
+let btwAccept = true;
+const btwDispatch = vi.fn((event: Event) => { if (btwAccept) event.preventDefault(); return !event.defaultPrevented; });
 
 /** Fires a document-wide event on every mocked window or document that listens. */
 function fire(on: "window" | "document", type: string, eventTarget: unknown = {}) {
@@ -140,6 +144,9 @@ function entry(label: string) {
 }
 
 beforeEach(() => {
+  btwAvailable = false;
+  btwAccept = true;
+  btwDispatch.mockClear();
   mockOS.__rnMockOS = "web";
   capabilities.hover = true;
   capabilities.touch = false;
@@ -157,6 +164,7 @@ afterEach(() => {
   toastShow.mockClear();
   toastError.mockClear();
   copyElementImage.mockReset();
+  vi.useRealTimers();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
@@ -226,6 +234,96 @@ describe("Markdown table copy menu", () => {
   const selectedCells = () => renderer!.root.findAll((node) => String(node.type) === "Text"
     && node.props.testID === "markdown-table-cell"
     && StyleSheet.flatten(node.props.style).backgroundColor === tokens.selectionFill);
+
+  const btwEntry = () => renderer!.root.findAll((node) => String(node.type) === "Pressable"
+    && node.props.accessibilityLabel === "Add to BTW");
+
+  it("offers Add to BTW for a selected cell only inside a web BTW target", async () => {
+    render();
+    doubleClick(2);
+    expect(btwEntry()).toHaveLength(0);
+    act(() => fire("document", "pointerdown"));
+    btwAvailable = true;
+    doubleClick(2);
+    expect(btwEntry()).toHaveLength(1);
+    expect(btwEntry()[0]!.findAll((node) => String(node.type) === "Text")[0]!.children).toEqual(["添加到 BTW"]);
+    await act(async () => btwEntry()[0]!.props.onPress());
+    expect((btwDispatch.mock.calls[0]![0] as CustomEvent).detail).toEqual({ text: "> one\n\n" });
+    expect(selectedCells()).toHaveLength(0);
+    expect(copyText).not.toHaveBeenCalled();
+  });
+
+  it("retains the BTW action through the timed collapse, disables it, and refreshes availability next open", () => {
+    vi.useFakeTimers();
+    const runs: Array<{ toValue: number; duration: number }> = [];
+    vi.spyOn(Animated, "timing").mockImplementation((...args: unknown[]) => {
+      const config = args[1] as { toValue: number; duration: number };
+      runs.push(config);
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      return {
+        start(callback?: (result: { finished: boolean }) => void) {
+          timer = setTimeout(() => callback?.({ finished: true }), config.duration);
+        },
+        stop() { clearTimeout(timer); }, reset() {},
+      };
+    });
+    btwAvailable = true;
+    render();
+    doubleClick(2);
+    act(() => selectionRow().props.onLayout({ nativeEvent: { layout: { width: 320 } } }));
+    act(() => { vi.advanceTimersByTime(180); });
+    expect(btwEntry()).toHaveLength(1);
+    act(() => fire("document", "pointerdown"));
+    const closingActions = () => selectionRow().findAll(node => String(node.type) === "Pressable");
+    expect(closingActions()).toHaveLength(3);
+    expect(closingActions().map(node => [node.props.accessible, node.props.focusable, node.props.accessibilityLabel]))
+      .toEqual([[false, false, undefined], [false, false, undefined], [false, false, undefined]]);
+    expect(runs.at(-2)).toMatchObject({ toValue: 30, duration: 160 });
+    expect(runs.at(-1)).toMatchObject({ toValue: 0, duration: 80 });
+    act(() => { vi.advanceTimersByTime(159); });
+    expect(closingActions()).toHaveLength(3);
+    act(() => { vi.advanceTimersByTime(1); });
+    expect(renderer!.root.findAll(node => node.props.testID === "table-selection-menu-row")).toHaveLength(0);
+    btwAvailable = false;
+    doubleClick(2);
+    expect(btwEntry()).toHaveLength(0);
+    expect(selectionRow().findAll(node => String(node.type) === "Pressable")).toHaveLength(2);
+    act(() => fire("document", "pointerdown"));
+    act(() => { vi.advanceTimersByTime(160); });
+    btwAvailable = true;
+    doubleClick(2);
+    expect(btwEntry()).toHaveLength(1);
+    act(() => fire("document", "pointerdown"));
+    btwAvailable = false;
+    doubleClick(2);
+    expect(btwEntry()).toHaveLength(0);
+    expect(selectionRow().findAll(node => String(node.type) === "Pressable")).toHaveLength(2);
+  });
+
+  it("never offers Add to BTW on native", () => {
+    mockOS.__rnMockOS = "ios";
+    btwAvailable = true;
+    render();
+    act(() => renderer!.update(React.createElement(TableCopyMenu, {
+      source: () => SOURCE, frame: { current: null }, tokens,
+      selected: { text: "one", dismiss: vi.fn() },
+    })));
+    expect(selectedCopy()).toBeDefined();
+    expect(btwEntry()).toHaveLength(0);
+  });
+
+  it.each([false, true])("copies cell text, toasts Copied instead, and stays open when event is unhandled (clipboard rejection=%s)", async (reject) => {
+    btwAvailable = true;
+    btwAccept = false;
+    if (reject) copyText.mockRejectedValueOnce(new Error("denied"));
+    render();
+    doubleClick(2);
+    await act(async () => btwEntry()[0]!.props.onPress());
+    expect(copyText).toHaveBeenCalledExactlyOnceWith("one");
+    expect(selectedCells()).toHaveLength(1);
+    if (reject) expect(toastError).toHaveBeenCalledExactlyOnceWith("复制失败");
+    else expect(toastShow).toHaveBeenCalledExactlyOnceWith("已复制到剪贴板");
+  });
 
   it("adds a double-clicked cell through the desktop input with an icon and translated label", () => {
     const appendText = vi.fn(() => true);

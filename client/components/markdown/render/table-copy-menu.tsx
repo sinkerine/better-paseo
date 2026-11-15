@@ -1,6 +1,6 @@
 import React, { memo, useCallback, useContext, useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 import { Animated, Platform, Pressable, StyleSheet, Text, View, useWindowDimensions } from "react-native";
-import { Icon } from "@getpaseo/plugin/client/react-native";
+import { Icon, copyText, useToast } from "@getpaseo/plugin/client/react-native";
 import type { ExtendedThemeTokens } from "../../theme-tokens";
 import { unselectable } from "../../selection";
 import { useCopy } from "../../../ui/use-copy";
@@ -16,7 +16,7 @@ import { useEnhancerPreferences } from "../../../preferences";
 import { toolbarLabel } from "../../../i18n/toolbar-strings";
 import { bindTouchDismiss, suppressTouchCallout } from "../../../web";
 import { ChatComposerContext, quoteCell } from "../../../ui/chat-composer";
-import { insertIntoComposer } from "../../selection-actions";
+import { insertIntoComposer, canInsertIntoBtw, insertIntoBtw } from "../../selection-actions";
 
 /** The selected cells' copy, how to drop them, and which outside presses keep them. */
 export interface TableSelected {
@@ -49,7 +49,7 @@ function TableCopyMenuBody({ source, frame, tokens, selected }: {
   const control = Platform.OS === "web" && canCopyImage()
     ? <ExpandingMenu source={source} frame={frame} tokens={tokens} trigger={hover ? "hover" : "longPress"} />
     : <ToolbarCopyButton text={source} tokens={tokens} label="Copy Markdown table" align="start" outlined />;
-  return <SelectionCopyMenu selected={selected} tokens={tokens}>{control}</SelectionCopyMenu>;
+  return <SelectionCopyMenu frame={frame} selected={selected} tokens={tokens}>{control}</SelectionCopyMenu>;
 }
 
 /** Memoised: a streamed chunk redraws the table, not its closed corner. */
@@ -62,8 +62,9 @@ export const TableCopyMenu = memo(TableCopyMenuBody);
  * selected. The menu mounts with the first selection and stays through its
  * exit, which a new selection can interrupt.
  */
-function SelectionCopyMenu({ children, selected, tokens }: {
+function SelectionCopyMenu({ children, selected, tokens, frame }: {
   children: ReactNode;
+  frame: RefObject<View | null>;
   selected?: TableSelected;
   tokens: ExtendedThemeTokens;
 }) {
@@ -76,7 +77,7 @@ function SelectionCopyMenu({ children, selected, tokens }: {
       </View>
     );
   }
-  return <SelectionMenu selected={selected} tokens={tokens} onHidden={() => setHeld(false)} />;
+  return <SelectionMenu frame={frame} selected={selected} tokens={tokens} onHidden={() => setHeld(false)} />;
 }
 
 /**
@@ -85,9 +86,10 @@ function SelectionCopyMenu({ children, selected, tokens }: {
  * mounted meanwhile; the frame paints its own fill and covers the control's
  * place at every width, so no full-width backing remains during the exit.
  */
-function SelectionMenu({ selected, tokens, onHidden }: {
+function SelectionMenu({ selected, tokens, onHidden, frame }: {
   selected?: TableSelected;
   tokens: ExtendedThemeTokens;
+  frame: RefObject<View | null>;
   /** The exit has finished: the closed control returns. */
   onHidden(): void;
 }) {
@@ -98,9 +100,14 @@ function SelectionMenu({ selected, tokens, onHidden }: {
   const windowWidth = useWindowDimensions().width;
   const open = selected !== undefined;
   const anchorRef = useRef<View>(null);
+  const toast = useToast();
+  const [btw, setBtw] = useState(false);
   const dismiss = selected?.dismiss;
   const selectedText = selected?.text;
   const keeps = selected?.keeps;
+  useLayoutEffect(() => {
+    if (open) setBtw(Platform.OS === "web" && canInsertIntoBtw((anchorRef.current ?? frame.current) as unknown as Element | null));
+  }, [open, selectedText, frame]);
   useEffect(() => {
     if (!dismiss || Platform.OS !== "web") return;
     const release = bindTouchDismiss(anchorRef.current, dismiss, { keep: keeps });
@@ -154,7 +161,10 @@ function SelectionMenu({ selected, tokens, onHidden }: {
         style={[styles.frame, styles.nativeFrame, { width, backgroundColor: tokens.surface0, borderColor: tokens.v2.border }]}>
         <View style={{ width: windowWidth }}>
           <View testID="table-selection-menu-row" style={styles.selectedRow}
-            onLayout={(event) => setMeasured(Math.ceil(event.nativeEvent.layout.width) + BORDER * 2)}>
+            onLayout={(event) => {
+              const { width: rowWidth } = event.nativeEvent.layout;
+              setMeasured(Math.ceil(rowWidth) + BORDER * 2);
+            }}>
             <Pressable accessibilityRole="button" accessible={open} focusable={open} accessibilityLabel={open ? "Copy selected cell" : undefined}
               onPress={() => {
                 if (selected) void copy(selected.text, { feedback: "toast", label: "Copy selected" })
@@ -188,6 +198,33 @@ function SelectionMenu({ selected, tokens, onHidden }: {
                   <Text selectable={false} numberOfLines={1}
                     style={[styles.label, unselectable, { color: tokens.foreground, fontFamily: tokens.fontUi }]}>
                     {toolbarLabel("Add to chat", language)}
+                  </Text>
+                </Pressable>
+              </Animated.View>
+            ) : null}
+            {btw ? (
+              <Animated.View style={{ opacity: reveal,
+                transform: [{ translateX: reveal.interpolate({ inputRange: [0, 1], outputRange: [-4, 0] }) }] }}>
+                <Pressable accessibilityRole="button" accessible={open} focusable={open}
+                  accessibilityLabel={open ? "Add to BTW" : undefined}
+                  onPress={async () => {
+                    if (!selected) return;
+                    if (insertIntoBtw(quoteCell(selected.text), (anchorRef.current ?? frame.current) as unknown as Element | null)) {
+                      selected.dismiss();
+                      return;
+                    }
+                    try {
+                      await copyText(selected.text);
+                      toast.show(toolbarLabel("Copied instead", language));
+                    } catch {
+                      toast.error(toolbarLabel("Couldn't copy", language));
+                    }
+                  }}
+                  style={({ pressed }) => [styles.selected, { backgroundColor: pressed ? floatPressed(tokens) : tokens.surface0 }]}>
+                  <Icon name="MessagesSquare" size={FLOAT.iconSize} color={tokens.foregroundMuted} />
+                  <Text selectable={false} numberOfLines={1}
+                    style={[styles.label, unselectable, { color: tokens.foreground, fontFamily: tokens.fontUi }]}>
+                    {toolbarLabel("Add to BTW", language)}
                   </Text>
                 </Pressable>
               </Animated.View>

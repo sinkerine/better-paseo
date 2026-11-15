@@ -57,6 +57,20 @@ const CODE_SELECTOR = "[data-bccode]";
 /** The host composer input carries `dataSet={{ composerInput: "" }}`. */
 const COMPOSER_SELECTOR = "[data-composer-input]";
 
+export const BTW_TARGET_SELECTOR = "[data-btw-thread]";
+export const BTW_INSERT_EVENT = "paseo:btw-insert";
+
+export function canInsertIntoBtw(from: Element | null): boolean {
+  return Boolean(from?.closest?.(BTW_TARGET_SELECTOR));
+}
+
+export function insertIntoBtw(snippet: string, from: Element | null): boolean {
+  if (!from || !snippet) return false;
+  return !from.dispatchEvent(new CustomEvent(BTW_INSERT_EVENT, {
+    bubbles: true, cancelable: true, detail: { text: snippet },
+  }));
+}
+
 const GAP = 8;
 /** How long a pressed button shows its check before the bar steps aside. */
 const DONE_MS = 700;
@@ -66,6 +80,7 @@ const LEAVE_MS = 100;
 /** Lucide's shapes, the set the plugin's `Icon` draws, inlined: the bar is raw DOM. */
 const ICONS = {
   copy: '<rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>',
+  btw: '<path d="M16 3H5a2 2 0 0 0-2 2v11l4-4h9a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2Z"/><path d="M8 16v1a2 2 0 0 0 2 2h7l4 4V10a2 2 0 0 0-2-2h-1"/>',
   check: '<path d="M20 6 9 17l-5-5"/>',
   add: '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/><path d="M12 7v6"/><path d="M9 10h6"/>',
 } as const;
@@ -240,6 +255,7 @@ const BAR_CSS = `
   flex: 0 0 auto;
   transition: background-color 100ms ${FLOAT_EASE.out};
 }
+.btn[hidden] { display: none; }
 .btn:hover { background-color: var(--bc-bar-hover); }
 .btn:active { background-color: var(--bc-bar-pressed); }
 .btn:focus { outline: none; }
@@ -265,7 +281,7 @@ const BAR_CSS = `
 interface Bar {
   host: HTMLDivElement;
   setTheme(tokens: ExtendedThemeTokens): void;
-  show(rect: DOMRect): void;
+  show(rect: DOMRect, options?: { btw?: boolean }): void;
   hide(): void;
   dispose(): void;
 }
@@ -339,7 +355,7 @@ function createBar(done: () => void): Bar {
   };
 
   const reset = () => {
-    for (const button of [copyButton, addButton]) {
+    for (const button of [copyButton, addButton, btwButton]) {
       paint(button, button.dataset.label ?? "", button.dataset.icon as IconName);
     }
   };
@@ -372,6 +388,26 @@ function createBar(done: () => void): Bar {
     flash(button, "Copied instead");
   });
 
+  const btwButton = makeButton("Add to BTW", "btw", async (button) => {
+    const snapshot = readSelection();
+    if (!snapshot) return;
+    if (insertIntoBtw(quote(snapshot), snapshot.element)) {
+      flash(button, "Added");
+      return;
+    }
+    window.clearTimeout(doneTimer);
+    button.disabled = true;
+    paint(button, "Copying", "btw");
+    try {
+      await copyText(snapshot.text);
+      flash(button, "Copied instead");
+    } catch {
+      paint(button, "Couldn't copy", "btw");
+    } finally {
+      button.disabled = false;
+    }
+  });
+
   // The bar keeps the selection alive: a press inside it must not move the
   // caret, or `window.getSelection()` is empty by the time the click lands.
   const holdSelection = (event: MouseEvent) => event.preventDefault();
@@ -397,7 +433,8 @@ function createBar(done: () => void): Bar {
       // "Follow Paseo" reads the host's own font variable directly.
       bar.style.fontFamily = tokens.fontUi ?? "var(--paseo-ui-font, system-ui, sans-serif)";
     },
-    show(rect) {
+    show(rect, options) {
+      btwButton.hidden = !options?.btw;
       window.clearTimeout(leaveTimer);
       const arriving = host.style.getPropertyValue("display") === "none" || bar.classList.contains("leaving");
       if (host.style.getPropertyValue("display") === "none") {
@@ -493,7 +530,7 @@ function startController(): Controller {
       bar.hide();
       return;
     }
-    bar.show(snapshot.rect);
+    bar.show(snapshot.rect, { btw: canInsertIntoBtw(snapshot.element) });
   };
 
   // Selection events fire per character during a drag, so they coalesce to the

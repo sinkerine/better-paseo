@@ -695,6 +695,7 @@ only their whole names, so `github` and `timeline` stay out.
   one cell copies its text, several copy a Markdown table of the selected rows and columns, in table
   order, under their header. The corner menu always offers
   **Copy selected**, and **Add to chat** where Paseo lets the plugin write into the composer.
+  On web and desktop, **Add to BTW** also appears when the chat has a BTW conversation.
 - Each completed turn has a footer under its final reply with Copy and its time, plus the provider
   mark, model, thinking level and observed duration when available. Hover or long-press it for a
   **Turn details** table: agent, model, thinking level, start, end, elapsed time and input, cached
@@ -754,7 +755,8 @@ resized and its text selected.
   have a copy button.
 - Selecting text in a card on web or desktop raises **Copy** and **Add to chat**, which quotes the
   selection in the composer, fenced when it came from code. The bar closes on scroll; if no composer
-  is visible, **Add to chat** copies the selection instead.
+  is visible, **Add to chat** copies the selection instead. When the chat has a BTW conversation,
+  **Add to BTW** appends the quote to its BTW draft and opens the BTW composer.
 
 <picture><source media="(prefers-color-scheme: dark)" srcset="https://github.com/RoundRedDot/better-paseo/releases/download/media-assets/media--docs--images--selection-actions-dark.png"><img alt="Selected text with Copy and Add to chat actions" src="https://github.com/RoundRedDot/better-paseo/releases/download/media-assets/media--docs--images--selection-actions-light.png"></picture>
 
@@ -1018,7 +1020,7 @@ and hides the Tool calls, Spacing, Messages and Hover previews groups. The Tasks
 | Messages | Enhanced prompt bubble | Off | Keeps Copy visible and shows the newest turn's token usage. Readable pasted images are drawn; prompts with other attachments stay with Paseo. Changing it updates existing prompts too. |
 | Messages | Plugin markdown for replies | On | Off hands replies to Paseo, restoring its full footer and enabling host images and Paseo's file links. Mermaid diagrams work with plugin Markdown on. |
 | Messages | Markdown style | Document | Document, Compact or Terminal (body in the code font). |
-| Messages | Selection toolbar | On | Web and desktop: Copy and Add to chat on selected text; the bar closes on scroll. |
+| Messages | Selection toolbar | On | Web and desktop: Copy and Add to chat on selected text, plus Add to BTW when the chat has a BTW conversation; the bar closes on scroll. |
 | Hover previews | Hover previews | On | Preview collapsed rows and paths on desktop hover; with block details off, long-press a collapsed row on a touch screen. |
 | Hover previews | Block details panel (preview) | On | On a touch screen a tap opens a row's [details](#block-details) in a drawer or panel, and a long press shows the row's actions; on desktop the hover preview and right-click menu open the panel. Off, a tap expands the row and a long press previews it. |
 | Hover previews | Delay | 1 s | 0–10 s, saved to tenths of a second, before the desktop preview opens. Web and desktop only. |
@@ -1134,7 +1136,7 @@ for. Upstream states are as of the same date.
 | Let Paseo's Ctrl/Cmd+F reveal a row the plugin drew. | The plugin's own find bar, over loaded messages ([Finding text](#finding-text)). | nothing filed |
 | Space its rows like Paseo's native tool rows. Paseo puts a 16pt gap under each plugin row. | **Tight rows** and **Tight reply** take most of it back where it is safe. | [#6602](https://github.com/getpaseo/paseo/pull/6602), open |
 | Follow a font change in Paseo's Appearance settings live. Paseo does not share its font settings with plugins. | Web and desktop read the font Paseo saved on that computer; iOS and Android use the system monospace at 12px under Follow Paseo. | not proposed upstream yet |
-| Offer **Add to chat** for a table selection on iOS and Android. Plugins cannot write into Paseo's composer. | **Copy selected**. On web the plugin inserts the text into the composer itself. | not proposed upstream yet |
+| Offer **Add to chat** for a table selection on iOS and Android. Plugins cannot write into Paseo's composer. | **Copy selected**. On web the plugin inserts the text into the composer itself and offers **Add to BTW** when the chat has a BTW conversation; BTW insertion is unavailable on native. | not proposed upstream yet |
 | Pin the current prompt, or an open card's header, to the top while you scroll. | The plugin side is ready and turns on once Paseo offers it. | not proposed upstream yet |
 | Group several calls into one "Read 12 files" row. Paseo folds runs of calls under its Summary tool-call display, but skips plugin rows. | Rows stay one per call. | [Discussion #7687](https://github.com/getpaseo/paseo/discussions/7687), open |
 | Scroll a 5,000-line block quickly (about 30 s to open on a development-build simulator). | Long output folds to 12 lines and renders in batches. | no host API |
