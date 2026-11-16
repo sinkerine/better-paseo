@@ -9,6 +9,7 @@ import { SELECTION_BAR_SELECTOR } from "./components/selection-actions";
 import { DESKTOP_OVERLAY } from "./ui/tokens/motion";
 import { radiusV2 } from "./components/theme-tokens";
 import { hasActiveDetailsKeyboard } from "./details/keyboard";
+import { CHAT_COMPOSER_OWNER_ATTRIBUTE } from "./components/composer-resolution";
 
 /** Device-only plugin preferences; these never pass through the daemon's settings API. */
 export function readDevicePreference(key: string): string | null {
@@ -475,6 +476,12 @@ export function openPreviewLayer(node: unknown, anchor: unknown, close: () => vo
   const content = row.closest<HTMLElement>(`[${PLUGIN_ROOT_ATTRIBUTE}]`)!;
   const viewport = options.maximized ? row.closest<HTMLElement>("[data-window-content]")! : null;
   const view = panel.ownerDocument.defaultView!;
+  // Keep the origin explicit on the preview, including unavailable/invalid owners.
+  // Popovers retain DOM ancestry, so Add to BTW still bubbles through its origin.
+  const owner = row.closest(`[${CHAT_COMPOSER_OWNER_ATTRIBUTE}]`)?.getAttribute?.(CHAT_COMPOSER_OWNER_ATTRIBUTE);
+  const hasOwner = owner !== undefined && owner !== null;
+  const originalOwner = hasOwner ? panel.getAttribute(CHAT_COMPOSER_OWNER_ATTRIBUTE) : null;
+  if (hasOwner) panel.setAttribute(CHAT_COMPOSER_OWNER_ATTRIBUTE, owner);
   panel.setAttribute("popover", "manual");
   panel.style.position = "fixed";
   panel.style.inset = "auto";
@@ -663,6 +670,10 @@ export function openPreviewLayer(node: unknown, anchor: unknown, close: () => vo
     // Maximize re-lays out this same panel: the grow starts from where it was.
     if (!options.maximized) hoverRects.set(panel, panel.getBoundingClientRect());
     panel.hidePopover();
+    if (hasOwner) {
+      if (originalOwner === null) panel.removeAttribute(CHAT_COMPOSER_OWNER_ATTRIBUTE);
+      else panel.setAttribute(CHAT_COMPOSER_OWNER_ATTRIBUTE, originalOwner);
+    }
   };
 }
 

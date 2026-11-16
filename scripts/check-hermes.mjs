@@ -78,7 +78,9 @@ function currentHermesc() {
 // VM. Fetched once with `npm pack` and kept outside the repo.
 const LEGACY_REACT_NATIVE = "0.81.5";
 function legacyHermesDir() {
-  const cache = path.join(homedir(), ".cache", "better-paseo", `hermes-rn-${LEGACY_REACT_NATIVE}`, PLATFORM_DIR);
+  const cacheHome = process.env.XDG_CACHE_HOME;
+  const cacheRoot = cacheHome && path.isAbsolute(cacheHome) ? cacheHome : path.join(homedir(), ".cache");
+  const cache = path.join(cacheRoot, "better-paseo", `hermes-rn-${LEGACY_REACT_NATIVE}`, PLATFORM_DIR);
   if (existsSync(path.join(cache, `hermes${EXE}`))) return cache;
   const work = mkdtempSync(path.join(tmpdir(), "bc-hermes-legacy-"));
   try {

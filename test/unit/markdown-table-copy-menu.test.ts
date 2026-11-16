@@ -186,8 +186,16 @@ function desktopComposer(available = true) {
   }
   vi.stubGlobal("HTMLTextAreaElement", TextArea);
   vi.stubGlobal("HTMLInputElement", class {});
-  vi.stubGlobal("document", { execCommand: vi.fn(() => false) });
-  const input = new TextArea();
+  vi.stubGlobal("document", {
+    execCommand: vi.fn(() => false),
+    defaultView: {
+      HTMLTextAreaElement: TextArea,
+      HTMLInputElement: globalThis.HTMLInputElement,
+      Event,
+      getComputedStyle: () => ({ visibility: "visible" }),
+    },
+  });
+  const input = Object.assign(new TextArea(), { ownerDocument: document });
   const published = vi.fn();
   input.addEventListener("input", () => published(input.value));
   const scope = { parentElement: null, querySelectorAll: () => available ? [input] : [] };

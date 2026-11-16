@@ -100,8 +100,12 @@ the host's options and compiles it twice: with the Hermes V1 `hermesc` of the
 0.81.5's legacy Hermes, which Paseo 0.12 still runs and which rejects code V1
 accepts, `class` among it. The legacy compiler and `hermes` VM come from
 `npm pack react-native@0.81.5` on the first run, cached in
-`~/.cache/better-paseo/`. Any error is mapped back to its source file and
-line. Hermes V1 publishes no VM, so the script then evaluates the bundle in
+`$XDG_CACHE_HOME/better-paseo/` when `XDG_CACHE_HOME` is an absolute path,
+otherwise `~/.cache/better-paseo/` (unset, empty or relative values use that fallback).
+For an isolated check, set absolute task-owned `XDG_CACHE_HOME`, `TMPDIR` and
+`npm_config_cache` paths before running the command; the spawned `npm pack` uses
+the same environment. Any error is mapped back to its source file and line.
+Hermes V1 publishes no VM, so the script then evaluates the bundle in
 the legacy `hermes` VM against stub modules, calls `contribute`, and checks
 the host's registration rules. Pass
 `--no-run` to compile only. `npm run check:hermes` then runs it again with
@@ -134,6 +138,23 @@ bundle's module code took about 76 ms (median) with the settings page, the
 Tasks board and the find bar behind `import()`, against about 62 ms with
 static imports. Leaving those three out of the bundle took it to about 42 ms.
 Code only leaves the startup path when it leaves the bundle.
+
+## Web selection composer ownership
+
+Hosts can mark selection origins with `data-chat-composer-owner` and real main
+composer roots with `data-chat-composer-root`. Both values are the exact opaque
+`JSON.stringify([serverId, parentAgentId])` string, with two nonempty string IDs.
+The source mark belongs on the parent region, BTW region and originating preview
+content even when its main composer is absent. Only the real main composer root
+gets the destination mark; BTW and preview roots must never be destinations.
+
+An explicit source resolves only matching destinations in its own document and
+accepts visible writable composer fields, including an unfocused main composer.
+Invalid keys and unavailable destinations refuse the edit without an ancestor or
+other-document fallback. Unmarked hosts keep the legacy ancestor search. The
+selection bar copies raw text on refusal and reports clipboard completion or
+failure honestly. Preview popovers inherit the source mark while retaining DOM
+ancestry for the existing cancelable `paseo:btw-insert` event path.
 
 ## Media and benchmark production
 

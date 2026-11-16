@@ -7,6 +7,8 @@ import type { ExtendedThemeTokens } from "./theme-tokens";
 import { FLOAT, FLOAT_EASE, floatHover, floatPressed, floatShadow } from "../ui/tokens/float";
 import { getEnhancerPreferences } from "../preferences";
 import { toolbarLabel } from "../i18n/toolbar-strings";
+import { CHAT_COMPOSER_OWNER_ATTRIBUTE, CHAT_COMPOSER_ROOT_ATTRIBUTE, resolveComposer, type ComposerResolutionPort } from "./composer-resolution";
+import { addSelectionToChat } from "./selection-chat-action";
 
 /**
  * A floating Copy / Add to chat bar for highlighted callout text.
@@ -139,25 +141,29 @@ function quote(snapshot: Snapshot): string {
 type Field = HTMLTextAreaElement | HTMLInputElement;
 
 function fieldOf(marked: Element): Field | null {
-  if (marked instanceof HTMLTextAreaElement || marked instanceof HTMLInputElement) return marked;
+  const view = marked.ownerDocument?.defaultView;
+  if (marked instanceof (view?.HTMLTextAreaElement ?? HTMLTextAreaElement)
+    || marked instanceof (view?.HTMLInputElement ?? HTMLInputElement)) return marked as Field;
   return marked.querySelector("textarea, input");
 }
 
-/**
- * The composer of the chat the selection was made in. Paseo keeps every open
- * tab and split pane mounted, hidden with `display: none`, so the document's
- * first composer is often another chat's, invisible and unable to take focus.
- * The search widens from the selection outwards, one ancestor at a time, and
- * takes the first composer that is on screen.
- */
+const composerPort: ComposerResolutionPort<Element, Field> = {
+  parent: (node) => node.parentElement,
+  owner: (node) => node.getAttribute?.(CHAT_COMPOSER_OWNER_ATTRIBUTE) ?? null,
+  destinations: (source) => source.ownerDocument.querySelectorAll(`[${CHAT_COMPOSER_ROOT_ATTRIBUTE}]`),
+  destinationOwner: (root) => root.getAttribute(CHAT_COMPOSER_ROOT_ATTRIBUTE),
+  fields: (root) => Array.from(root.querySelectorAll(COMPOSER_SELECTOR), fieldOf)
+    .filter((field): field is Field => field !== null),
+  available(field) {
+    if (field.readOnly || field.disabled || field.matches?.(":disabled") || field.getClientRects().length === 0) return false;
+    const visibility = field.ownerDocument?.defaultView?.getComputedStyle(field).visibility;
+    return visibility !== "hidden" && visibility !== "collapse";
+  },
+};
+
+/** Explicit owners route only to their own document's main composer; older hosts search ancestors. */
 export function nearestComposer(from: Element | null): Field | null {
-  for (let scope = from; scope; scope = scope.parentElement) {
-    for (const marked of Array.from(scope.querySelectorAll(COMPOSER_SELECTOR))) {
-      const field = fieldOf(marked);
-      if (field && field.getClientRects().length > 0) return field;
-    }
-  }
-  return null;
+  return resolveComposer(from, composerPort);
 }
 
 /**
@@ -188,20 +194,21 @@ export function insertIntoComposer(snippet: string, from: Element | null): boole
 
   input.focus();
   input.setSelectionRange(start, end);
-  if (document.execCommand("insertText", false, insert) && input.value === next) {
+  if (input.ownerDocument.execCommand("insertText", false, insert) && input.value === next) {
     input.setSelectionRange(caret, caret);
     return true;
   }
 
+  const view = input.ownerDocument.defaultView!;
   const prototype =
-    input instanceof HTMLTextAreaElement
-      ? HTMLTextAreaElement.prototype
-      : HTMLInputElement.prototype;
+    input instanceof view.HTMLTextAreaElement
+      ? view.HTMLTextAreaElement.prototype
+      : view.HTMLInputElement.prototype;
   const setValue = Object.getOwnPropertyDescriptor(prototype, "value")?.set;
   if (!setValue) return false;
 
   setValue.call(input, next);
-  input.dispatchEvent(new Event("input", { bubbles: true }));
+  input.dispatchEvent(new view.Event("input", { bubbles: true }));
   if (input.value !== next) return false;
   input.setSelectionRange(caret, caret);
   return true;
@@ -375,17 +382,21 @@ function createBar(done: () => void): Bar {
     flash(button, "Copied");
   });
 
-  const addButton = makeButton("Add to chat", "add", (button) => {
+  const addButton = makeButton("Add to chat", "add", async (button) => {
     const snapshot = readSelection();
     if (!snapshot) return;
-    if (insertIntoComposer(quote(snapshot), snapshot.element)) {
-      flash(button, "Added");
-      return;
-    }
-    // No composer on screen — the snippet still reaches the clipboard, and the
-    // label says which of the two actions actually happened.
-    void copyText(snapshot.text);
-    flash(button, "Copied instead");
+    await addSelectionToChat(quote(snapshot), snapshot.text, {
+      insert: (snippet) => insertIntoComposer(snippet, snapshot.element),
+      copy: copyText,
+      pending(value) {
+        if (value) window.clearTimeout(doneTimer);
+        button.disabled = value;
+      },
+      show(result) {
+        if (result === "Added" || result === "Copied instead") flash(button, result);
+        else paint(button, result, "add");
+      },
+    });
   });
 
   const btwButton = makeButton("Add to BTW", "btw", async (button) => {
